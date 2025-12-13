@@ -59,6 +59,45 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/transcript/{video_input:path}/text")
+async def get_transcript_text(
+    video_input: str,
+    lang: str = Query("en", description="Language code"),
+    x_proxy_token: str = Header(..., alias="X-Proxy-Token")
+):
+    """
+    Get transcript as plain text (just the words, no timestamps).
+    """
+    check_auth(x_proxy_token)
+    
+    try:
+        video_id = get_video_id(video_input)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    ytt = get_ytt_client()
+    
+    try:
+        transcript = ytt.fetch(video_id, languages=[lang])
+        full_text = " ".join(seg.text for seg in transcript.snippets)
+        
+        return {
+            "video_id": video_id,
+            "language": transcript.language,
+            "language_code": transcript.language_code,
+            "text": full_text
+        }
+        
+    except TranscriptsDisabled:
+        raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
+    except NoTranscriptFound:
+        raise HTTPException(status_code=404, detail=f"No transcript found for language: {lang}")
+    except VideoUnavailable:
+        raise HTTPException(status_code=404, detail="Video unavailable")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching transcript: {str(e)}")
+
+
 @app.get("/transcript/{video_input:path}")
 async def get_transcript(
     video_input: str,
@@ -149,42 +188,3 @@ async def list_transcripts(
         raise HTTPException(status_code=404, detail="Video unavailable")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing transcripts: {str(e)}")
-
-
-@app.get("/transcript/{video_input:path}/text")
-async def get_transcript_text(
-    video_input: str,
-    lang: str = Query("en", description="Language code"),
-    x_proxy_token: str = Header(..., alias="X-Proxy-Token")
-):
-    """
-    Get transcript as plain text (just the words, no timestamps).
-    """
-    check_auth(x_proxy_token)
-    
-    try:
-        video_id = get_video_id(video_input)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    ytt = get_ytt_client()
-    
-    try:
-        transcript = ytt.fetch(video_id, languages=[lang])
-        full_text = " ".join(seg.text for seg in transcript.snippets)
-        
-        return {
-            "video_id": video_id,
-            "language": transcript.language,
-            "language_code": transcript.language_code,
-            "text": full_text
-        }
-        
-    except TranscriptsDisabled:
-        raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
-    except NoTranscriptFound:
-        raise HTTPException(status_code=404, detail=f"No transcript found for language: {lang}")
-    except VideoUnavailable:
-        raise HTTPException(status_code=404, detail="Video unavailable")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching transcript: {str(e)}")
