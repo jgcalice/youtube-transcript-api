@@ -14,7 +14,6 @@ from youtube_transcript_api._errors import (
     TranscriptsDisabled,
     NoTranscriptFound,
     VideoUnavailable,
-    NoTranscriptAvailable
 )
 
 app = FastAPI(title="YouTube Transcript API", docs_url=None, redoc_url=None)
@@ -103,8 +102,6 @@ async def get_transcript(
         raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail=f"No transcript found for language: {lang}")
-    except NoTranscriptAvailable:
-        raise HTTPException(status_code=404, detail="No transcripts available for this video")
     except VideoUnavailable:
         raise HTTPException(status_code=404, detail="Video unavailable")
     except Exception as e:
@@ -187,8 +184,6 @@ async def get_transcript_text(
         raise HTTPException(status_code=404, detail="Transcripts are disabled for this video")
     except NoTranscriptFound:
         raise HTTPException(status_code=404, detail=f"No transcript found for language: {lang}")
-    except NoTranscriptAvailable:
-        raise HTTPException(status_code=404, detail="No transcripts available for this video")
     except VideoUnavailable:
         raise HTTPException(status_code=404, detail="Video unavailable")
     except Exception as e:
