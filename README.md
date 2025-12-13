@@ -102,18 +102,59 @@ Add to your tunnel config:
 
 ## Claude Skill Integration
 
-Add the domain to Claude's allowed network list, then use from skills:
+This repo includes an `example_skill.skill` file for use with Claude's computer use / skills feature.
 
-```python
-import urllib.request
-import json
+### Setup
 
-def get_transcript(video_id, lang="en"):
-    url = f"https://yt-transcript.yourdomain.com/transcript/{video_id}?lang={lang}"
-    req = urllib.request.Request(url, headers={"X-Proxy-Token": "your-token"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())
-```
+1. Deploy this service on your residential IP (or any IP not blocked by YouTube)
+2. Expose via Cloudflare Tunnel or similar
+3. Add your domain to Claude's allowed network list in settings
+4. Edit the skill file to add your domain and auth token
+5. Import the skill into Claude
+
+### Example Prompts
+
+Once the skill is installed, you can ask Claude things like:
+
+**Summarisation**
+- "Summarise this YouTube video: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+- "Give me the key points from this lecture: [URL]"
+- "What are the main arguments in this video?"
+
+**Note Taking**
+- "Create study notes from this YouTube tutorial: [URL]"
+- "Turn this video into bullet points I can review later"
+- "Extract the step-by-step instructions from this how-to video"
+
+**Search & Analysis**
+- "Does this video mention anything about [topic]?"
+- "Find all the timestamps where they discuss [subject]"
+- "What questions does the speaker answer in this video?"
+
+**Content Extraction**
+- "Get me the transcript from this video"
+- "What languages are available for this video's captions?"
+- "Extract quotes from this interview about [topic]"
+
+**Translation & Accessibility**
+- "Get the Spanish transcript for this video"
+- "Translate the key points from this video into French"
+
+### Why This Exists
+
+YouTube blocks requests from cloud IPs (like Claude's sandbox), so fetching transcripts directly fails. This service runs on your residential IP and proxies the requests, making YouTube transcripts accessible to Claude.
+
+### Skill File Contents
+
+The skill teaches Claude:
+- Which API endpoints to call
+- How to authenticate requests
+- What response formats to expect
+- How to handle errors
+
+You'll need to edit `example_skill.skill` (it's just a zip file) to replace:
+- `https://your-domain.example.com` → your actual domain
+- `YOUR_TOKEN_HERE` → your `PROXY_AUTH_TOKEN` value
 
 ## License
 
