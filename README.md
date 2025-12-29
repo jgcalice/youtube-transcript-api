@@ -2,7 +2,25 @@
 
 A simple REST API service that fetches YouTube video transcripts. Designed to run on a residential IP to bypass YouTube's cloud IP blocks.
 
-## Endpoints
+## Why This Exists
+
+YouTube blocks requests from cloud IPs (like Claude's sandbox), so fetching transcripts directly fails. This service runs on your residential IP and proxies the requests, making YouTube transcripts accessible to Claude.
+
+## What Can I Do With This?
+
+Once set up as a Claude skill, you can ask Claude things like:
+
+- "Summarise this YouTube video: [URL]"
+- "What does this video say about [topic]?"
+- "Create notes from this lecture: [URL]"
+- "Find timestamps where they discuss [subject]"
+- "Get the transcript and search for mentions of [keyword]"
+- "Turn this video into bullet points I can review later"
+- "Extract quotes from this interview about [topic]"
+
+---
+
+## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -54,16 +72,6 @@ curl -H "X-Proxy-Token: your-token" \
   "https://yt-transcript.yourdomain.com/transcript/dQw4w9WgXcQ/text"
 ```
 
-Response:
-```json
-{
-  "video_id": "dQw4w9WgXcQ",
-  "language": "English", 
-  "language_code": "en",
-  "text": "We're no strangers to love You know the rules and so do I..."
-}
-```
-
 ### List available transcripts
 
 ```bash
@@ -76,13 +84,6 @@ curl -H "X-Proxy-Token: your-token" \
 ```bash
 curl -H "X-Proxy-Token: your-token" \
   "https://yt-transcript.yourdomain.com/transcript/dQw4w9WgXcQ?lang=es"
-```
-
-### Use full YouTube URL
-
-```bash
-curl -H "X-Proxy-Token: your-token" \
-  "https://yt-transcript.yourdomain.com/transcript/https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 ## Environment Variables
@@ -100,61 +101,76 @@ Add to your tunnel config:
   service: http://youtube-transcript-api:8000
 ```
 
-## Claude Skill Integration
+---
 
-This repo includes an `example_skill.skill` file for use with Claude's computer use / skills feature.
+## Claude Skill
 
-### Setup
+This repo includes a Claude skill (`skill/`) that lets Claude fetch and work with YouTube transcripts efficiently.
 
-1. Deploy this service on your residential IP (or any IP not blocked by YouTube)
+### How It Works
+
+The skill uses a **fetch-first, work-locally** approach to avoid blowing out Claude's context window:
+
+1. **Fetch** - Downloads full transcript, saves to `/home/claude/youtube/<video_id>.json`, returns metadata only (not the full text)
+2. **Work locally** - Claude uses `grep`, `head`, `cat` on the local file instead of dumping everything into context
+3. **Search** - Built-in search across all cached transcripts
+
+This means a 30-minute video transcript (~30k chars) doesn't eat your context - Claude just works with the file on disk.
+
+### Skill Setup
+
+1. Deploy this service on a residential IP (or any IP not blocked by YouTube)
 2. Expose via Cloudflare Tunnel or similar
 3. Add your domain to Claude's allowed network list in settings
-4. Edit the skill file to add your domain and auth token
-5. Import the skill into Claude
+4. Edit `skill/scripts/youtube.py`:
+   - Update `API_BASE` with your domain
+   - Update `API_TOKEN` with your `PROXY_AUTH_TOKEN` value
+5. Zip the `skill/` folder and rename to `.skill` extension
+6. Import into Claude via Settings → Skills
 
-### Example Prompts
+### Skill Commands
 
-Once the skill is installed, you can ask Claude things like:
+```bash
+# Fetch transcript (saves to disk, returns metadata only)
+python3 youtube.py fetch <video_url_or_id> [lang]
+python3 youtube.py fetch <video> --force    # Re-fetch even if cached
 
-**Summarisation**
-- "Summarise this YouTube video: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-- "Give me the key points from this lecture: [URL]"
-- "What are the main arguments in this video?"
+# Search across all cached transcripts (regex)
+python3 youtube.py search "pattern"
 
-**Note Taking**
-- "Create study notes from this YouTube tutorial: [URL]"
-- "Turn this video into bullet points I can review later"
-- "Extract the step-by-step instructions from this how-to video"
+# List cached transcripts
+python3 youtube.py list
 
-**Search & Analysis**
-- "Does this video mention anything about [topic]?"
-- "Find all the timestamps where they discuss [subject]"
-- "What questions does the speaker answer in this video?"
+# Load from cache (only when you need text in context)
+python3 youtube.py get <video_id>
+python3 youtube.py text <video> [max_chars]
 
-**Content Extraction**
-- "Get me the transcript from this video"
-- "What languages are available for this video's captions?"
-- "Extract quotes from this interview about [topic]"
+# Clear cache
+python3 youtube.py clear
+```
 
-**Translation & Accessibility**
-- "Get the Spanish transcript for this video"
-- "Translate the key points from this video into French"
+### Example Workflow
 
-### Why This Exists
+```bash
+# 1. Fetch (returns metadata, full transcript saved to disk)
+python3 youtube.py fetch "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+# → {video_id: "dQw4w9WgXcQ", status: "fetched", total_chars: 1847, path: "/home/claude/youtube/dQw4w9WgXcQ.json"}
 
-YouTube blocks requests from cloud IPs (like Claude's sandbox), so fetching transcripts directly fails. This service runs on your residential IP and proxies the requests, making YouTube transcripts accessible to Claude.
+# 2. Work with local file
+grep -i "love" /home/claude/youtube/dQw4w9WgXcQ.json
+cat /home/claude/youtube/dQw4w9WgXcQ.json | python3 -c "import sys,json; print(json.load(sys.stdin)['full_text'][:500])"
 
-### Skill File Contents
+# 3. Search across multiple cached videos
+python3 youtube.py search "never gonna give"
+```
 
-The skill teaches Claude:
-- Which API endpoints to call
-- How to authenticate requests
-- What response formats to expect
-- How to handle errors
+### Cache Location
 
-You'll need to edit `example_skill.skill` (it's just a zip file) to replace:
-- `https://your-domain.example.com` → your actual domain
-- `YOUR_TOKEN_HERE` → your `PROXY_AUTH_TOKEN` value
+```
+/home/claude/youtube/
+├── <video_id>.json    # Full transcript with segments
+└── manifest.json      # Index of cached videos
+```
 
 ## License
 
