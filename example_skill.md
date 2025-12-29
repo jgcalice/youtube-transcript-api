@@ -1,127 +1,93 @@
 ---
 name: youtube-transcript
-description: Fetch transcripts from YouTube videos via your residential proxy API. Use when Claude needs to get captions/subtitles from YouTube videos for summarisation, analysis, note-taking, or any task requiring video transcript text. Accepts video IDs or full YouTube URLs.
+description: Fetch transcripts from YouTube videos via residential proxy API. Use when Claude needs to get captions/subtitles from YouTube videos for summarisation, analysis, note-taking, or any task requiring video transcript text. Accepts video IDs or full YouTube URLs. Auto-caches transcripts for local operations.
 ---
 
 # YouTube Transcript Skill
 
-Fetch transcripts from YouTube videos via your residential proxy API.
+Fetch and cache YouTube video transcripts for local operations.
 
-## API Base URL
-`https://your-domain.example.com`
+## Default Workflow
 
-## Authentication
-All requests require the `X-Proxy-Token` header:
-```
-X-Proxy-Token: YOUR_TOKEN_HERE
-```
+**Always fetch first, then work locally:**
 
-## Endpoints
+```bash
+# 1. Fetch transcript (returns metadata only, saves full transcript to disk)
+python3 youtube.py fetch "https://www.youtube.com/watch?v=VIDEO_ID"
 
-### Get Transcript with Timestamps
-```
-GET /transcript/{video}?lang=en
-```
-Returns full transcript with timing data.
+# 2. Work with local file - DON'T dump into context
+grep -i "keyword" /home/claude/youtube/VIDEO_ID.json
+head -c 3000 /home/claude/youtube/VIDEO_ID.json | python3 -c "import sys,json; print(json.load(sys.stdin)['full_text'][:2000])"
 
-**Response:**
-```json
-{
-  "video_id": "dQw4w9WgXcQ",
-  "language": "English",
-  "language_code": "en",
-  "is_generated": true,
-  "segments": [
-    {"text": "Never gonna give you up", "start": 0.0, "duration": 2.5},
-    ...
-  ]
-}
+# 3. Use built-in search for multi-video grep
+python3 youtube.py search "pattern"
 ```
 
-### Get Plain Text Only
-```
-GET /transcript/{video}/text?lang=en
-```
-Returns transcript as plain text without timestamps.
+This keeps the full transcript out of context while letting you search, summarise, or extract what you need.
 
-**Response:**
-```json
-{
-  "video_id": "dQw4w9WgXcQ",
-  "language": "English",
-  "language_code": "en",
-  "text": "Never gonna give you up Never gonna let you down..."
-}
+## Scripts
+
+All at `/mnt/skills/user/youtube-transcript/scripts/`
+
+### youtube.py
+
+```bash
+# Fetch and cache (returns metadata only - no text blob in context)
+python3 youtube.py fetch <video_url_or_id> [lang]
+python3 youtube.py fetch <video> --force    # Re-fetch even if cached
+
+# Search across all cached transcripts
+python3 youtube.py search "pattern"
+
+# List what's cached
+python3 youtube.py list
+
+# Load from cache (only when you need text in context)
+python3 youtube.py get <video_id>
+python3 youtube.py text <video> [max_chars]  # With optional truncation
+
+# Clear cache
+python3 youtube.py clear
 ```
 
-### List Available Languages
-```
-GET /transcripts/{video}
-```
-Returns all available transcript languages for a video.
+## Cache Location
 
-**Response:**
-```json
-{
-  "video_id": "dQw4w9WgXcQ",
-  "transcripts": [
-    {"language": "English", "language_code": "en", "is_generated": true, "is_translatable": true},
-    {"language": "Spanish", "language_code": "es", "is_generated": false, "is_translatable": true}
-  ]
-}
+```
+/home/claude/youtube/
+├── <video_id>.json    # Full transcript with segments and full_text
+└── manifest.json      # Index of cached videos
+```
+
+Each cached file contains:
+- `full_text` - complete transcript as one string
+- `segments[]` - array of `{text, start, duration}` for timestamps
+- Metadata: language, duration, char count
+
+## Local File Operations
+
+After fetching, work with the local file:
+
+```bash
+# Grep for keywords
+grep -i "docker" /home/claude/youtube/VIDEO_ID.json
+
+# Get first N chars of transcript
+cat FILE.json | python3 -c "import sys,json; print(json.load(sys.stdin)['full_text'][:3000])"
+
+# Find segment at specific timestamp
+cat FILE.json | python3 -c "import sys,json; segs=json.load(sys.stdin)['segments']; print([s for s in segs if 300 < s['start'] < 360])"
 ```
 
 ## Video Input Formats
-The `{video}` parameter accepts:
+
+Accepts any of:
 - Video ID: `dQw4w9WgXcQ`
 - Full URL: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
 - Short URL: `https://youtu.be/dQw4w9WgXcQ`
 
-## Example Usage (Python)
-
-```python
-import urllib.request
-import json
-
-VIDEO = "dQw4w9WgXcQ"  # or full YouTube URL
-LANG = "en"
-
-url = f"https://your-domain.example.com/transcript/{VIDEO}?lang={LANG}"
-req = urllib.request.Request(url, headers={
-    "X-Proxy-Token": "YOUR_TOKEN_HERE"
-})
-
-with urllib.request.urlopen(req, timeout=30) as resp:
-    data = json.loads(resp.read().decode())
-    
-# Save to outputs
-with open("/mnt/user-data/outputs/transcript.json", "w") as f:
-    json.dump(data, f, indent=2)
-
-# Or save as plain text
-text = "\n".join(seg["text"] for seg in data["segments"])
-with open("/mnt/user-data/outputs/transcript.txt", "w") as f:
-    f.write(text)
-```
-
-## Common Use Cases
-
-1. **Summarise a YouTube video** - Fetch transcript, then summarise
-2. **Search for specific content** - Fetch transcript, search for keywords
-3. **Create notes from lectures** - Fetch transcript, structure into notes
-4. **Translate content** - Fetch transcript in original language, translate
-5. **Extract quotes with timestamps** - Use full transcript with timing data
-
-## Error Handling
-
-| Status | Meaning |
-|--------|---------|
-| 401 | Invalid or missing auth token |
-| 404 | Video not found or transcripts disabled |
-| 500 | Server error (check video exists and has captions) |
-
 ## Notes
-- Auto-generated captions are available for most videos
-- Manual captions (when available) are typically higher quality
-- Use `?lang=` to request specific languages (falls back to available)
-- This API should run on a residential IP to bypass YouTube's cloud IP blocks
+
+- `fetch` returns metadata only - full transcript stays on disk
+- Use `text` command sparingly - only when you actually need transcript in context
+- Auto-generated captions available for most videos
+- Cache persists for the session, search across multiple videos
