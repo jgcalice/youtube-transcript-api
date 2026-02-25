@@ -3,8 +3,11 @@ YouTube Transcript API Service
 Fetches YouTube transcripts via residential IP.
 """
 
+import json
 import os
 import re
+from datetime import date
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -17,6 +20,10 @@ from youtube_transcript_api._errors import (
 )
 
 app = FastAPI(title="YouTube Transcript API", docs_url=None, redoc_url=None)
+
+BASE_DIR = Path(__file__).resolve().parent
+TRANSCRIPTS_DIR = BASE_DIR / "transcripts"
+TRANSCRIPTS_DIR.mkdir(exist_ok=True)
 
 AUTH_TOKEN = os.getenv("PROXY_AUTH_TOKEN", "changeme")
 
@@ -46,6 +53,13 @@ def get_ytt_client() -> YouTubeTranscriptApi:
         )
         return YouTubeTranscriptApi(proxy_config=proxy_config)
     return YouTubeTranscriptApi()
+
+
+def save_transcript(video_id: str, lang: str, text: str):
+    """Save transcript text to a .txt file in the transcripts folder."""
+    today = date.today().strftime("%y-%m-%d")
+    file_path = TRANSCRIPTS_DIR / f"{today}_{video_id}_{lang}.txt"
+    file_path.write_text(text, encoding="utf-8")
 
 
 def check_auth(token: str):
@@ -80,7 +94,8 @@ async def get_transcript_text(
     try:
         transcript = ytt.fetch(video_id, languages=[lang])
         full_text = " ".join(seg.text for seg in transcript.snippets)
-        
+        save_transcript(video_id, transcript.language_code, full_text)
+
         return {
             "video_id": video_id,
             "language": transcript.language,
@@ -121,7 +136,9 @@ async def get_transcript(
     
     try:
         transcript = ytt.fetch(video_id, languages=[lang])
-        
+        full_text = " ".join(seg.text for seg in transcript.snippets)
+        save_transcript(video_id, transcript.language_code, full_text)
+
         return {
             "video_id": video_id,
             "language": transcript.language,
