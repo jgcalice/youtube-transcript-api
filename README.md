@@ -202,7 +202,12 @@ python3 youtube.py clear                             # Limpar cache
 ```
 
 ###
-example: curl.exe -H "X-Proxy-Token: a7c9f1d34e8b2a6f90d5c3e81b7f4a2d6c0e9a53d1f8b2c47e5a0d9f3c6b1a84" "http://localhost:8000/transcript/ZrBvPoFBVUo/text"
+example: 
+Passo 1: cd "e:\Documentos\IA\youtube_transcript\youtube-transcript-api"
+$env:PROXY_AUTH_TOKEN="a7c9f1d34e8b2a6f90d5c3e81b7f4a2d6c0e9a53d1f8b2c47e5a0d9f3c6b1a84"
+uvicorn app:app --host 0.0.0.0 --port 8000
+
+Passo 2: curl.exe -H "X-Proxy-Token: a7c9f1d34e8b2a6f90d5c3e81b7f4a2d6c0e9a53d1f8b2c47e5a0d9f3c6b1a84" "http://localhost:8000/transcript/ZrBvPoFBVUo/text"
 
 ## License
 
